@@ -109,11 +109,21 @@ jobs:
           echo "force_rebuild=$FORCE" >> $GITHUB_OUTPUT
 
       - name: Fetch PKGBUILD from AUR
+        id: fetch
         run: |
           chmod +x scripts/fetch-pkgbuild.sh
-          sudo -u builder ./scripts/fetch-pkgbuild.sh "${{ matrix.package }}" /build/aur
+          sudo -u builder ./scripts/fetch-pkgbuild.sh "${{ matrix.package }}" /build/aur || exit_code=$?
+          if [[ "${exit_code:-0}" -eq 4 ]]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Package available in official repos - skipping"
+            exit 0
+          elif [[ "${exit_code:-0}" -ne 0 ]]; then
+            exit $exit_code
+          fi
+          echo "skip=false" >> $GITHUB_OUTPUT
 
       - name: Build package
+        if: steps.fetch.outputs.skip != 'true'
         env:
           SKIP_PGP_CHECK: ${{ steps.pkg-config.outputs.skip_pgp == 'true' && '1' || '' }}
           PACKAGER: ${{ secrets.PACKAGER || 'LuckyChaoticAUR <noreply@github.com>' }}
@@ -124,6 +134,7 @@ jobs:
             $GITHUB_WORKSPACE/scripts/build-package.sh "${{ matrix.package }}" /build/aur /build/repo/x86_64
 
       - name: Upload built packages
+        if: steps.fetch.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: package-${{ matrix.package }}

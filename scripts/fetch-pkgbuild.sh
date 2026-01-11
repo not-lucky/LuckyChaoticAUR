@@ -5,9 +5,10 @@
 #
 # Exit codes:
 #   0 - Success
-#   1 - Package not found
+#   1 - Package not found in AUR
 #   2 - Network error
 #   3 - Git clone failed
+#   4 - Package exists in official repos (skipped)
 
 set -euo pipefail
 
@@ -49,6 +50,31 @@ if [[ -z "$PACKAGE" ]]; then
     log_error "Package name is required"
     usage
 fi
+
+# Check if package exists in official Arch repos
+check_official_repos() {
+    local pkg="$1"
+    local response
+
+    log_info "Checking if package '$pkg' exists in official repos..."
+
+    response=$(curl -sf "https://archlinux.org/packages/search/json/?name=${pkg}" 2>/dev/null) || {
+        log_warn "Could not check official repos (network error)"
+        return 1
+    }
+
+    local resultcount
+    resultcount=$(echo "$response" | jq -r '.results | length')
+
+    if [[ "$resultcount" -gt 0 ]]; then
+        local repo
+        repo=$(echo "$response" | jq -r '.results[0].repo')
+        log_warn "Package '$pkg' found in official repo '$repo' - skipping AUR build"
+        return 0
+    fi
+
+    return 1
+}
 
 # Check if package exists in AUR using RPC API
 check_package_exists() {
@@ -122,7 +148,13 @@ main() {
     # Create output directory
     mkdir -p "$OUTPUT_DIR"
 
-    # Check if package exists
+    # Check if package exists in official repos first
+    if check_official_repos "$PACKAGE"; then
+        log_info "Skipping '$PACKAGE' - available in official repositories"
+        exit 4
+    fi
+
+    # Check if package exists in AUR
     if ! check_package_exists "$PACKAGE"; then
         exit 1
     fi
