@@ -20,8 +20,8 @@ packages:
 #  - name: paru
 #    aur: true
 
-  - name: visual-studio-code-bin
-    aur: true
+#  - name: visual-studio-code-bin
+#    aur: true
 
 #  - name: spotify
 #    aur: true
@@ -33,5 +33,5 @@ packages:
   - name: windscribe-v2-bin
     aur: true
 
-  - name: kanata-git
-    aur: true
+#  - name: kanata-git
+#    aur: true
