@@ -1,7 +1,7 @@
 #!/bin/bash
 # fetch-pkgbuild.sh - Fetch PKGBUILD and related files from AUR
 #
-# Usage: ./fetch-pkgbuild.sh <package-name>
+# Usage: ./fetch-pkgbuild.sh <package-name> [output-dir] [--force] [--versions-file <path>]
 #
 # Exit codes:
 #   0 - Success
@@ -9,12 +9,41 @@
 #   2 - Network error
 #   3 - Git clone failed
 #   4 - Package exists in official repos (skipped)
+#   5 - Package version unchanged since last build (skipped)
 
 set -euo pipefail
 
-PACKAGE="${1:-}"
+PACKAGE=""
 AUR_BASE_URL="https://aur.archlinux.org"
-OUTPUT_DIR="${2:-./aur}"
+OUTPUT_DIR="./aur"
+FORCE_BUILD=false
+VERSIONS_FILE=""
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --force)
+            FORCE_BUILD=true
+            shift
+            ;;
+        --versions-file)
+            VERSIONS_FILE="$2"
+            shift 2
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+        *)
+            if [[ -z "$PACKAGE" ]]; then
+                PACKAGE="$1"
+            else
+                OUTPUT_DIR="$1"
+            fi
+            shift
+            ;;
+    esac
+done
 
 # Colors for output
 RED='\033[0;31m'
@@ -35,13 +64,17 @@ log_error() {
 }
 
 usage() {
-    echo "Usage: $0 <package-name> [output-dir]"
+    echo "Usage: $0 <package-name> [output-dir] [--force] [--versions-file <path>]"
     echo ""
     echo "Fetch PKGBUILD and related files from AUR"
     echo ""
     echo "Arguments:"
-    echo "  package-name  Name of the AUR package to fetch"
-    echo "  output-dir    Directory to store fetched files (default: ./aur)"
+    echo "  package-name         Name of the AUR package to fetch"
+    echo "  output-dir           Directory to store fetched files (default: ./aur)"
+    echo ""
+    echo "Options:"
+    echo "  --force              Force fetch even if version unchanged"
+    echo "  --versions-file      Path to versions.json for version comparison"
     exit 1
 }
 
@@ -141,6 +174,49 @@ get_package_info() {
     echo "$response" | jq -r '.results[0]'
 }
 
+# Get package version from AUR API response
+get_aur_version() {
+    local pkg="$1"
+    local response
+
+    response=$(curl -sf "${AUR_BASE_URL}/rpc/v5/info?arg[]=${pkg}" 2>/dev/null) || return 2
+
+    echo "$response" | jq -r '.results[0].Version // empty'
+}
+
+# Get cached version from versions.json
+get_cached_version() {
+    local pkg="$1"
+    local versions_file="$2"
+
+    if [[ -z "$versions_file" ]] || [[ ! -f "$versions_file" ]]; then
+        echo ""
+        return
+    fi
+
+    jq -r --arg pkg "$pkg" '.[$pkg] // empty' "$versions_file" 2>/dev/null || echo ""
+}
+
+# Check if version has changed
+check_version_changed() {
+    local pkg="$1"
+    local aur_version="$2"
+    local cached_version="$3"
+
+    if [[ -z "$cached_version" ]]; then
+        log_info "No cached version for '$pkg' - will build"
+        return 0
+    fi
+
+    if [[ "$aur_version" == "$cached_version" ]]; then
+        log_info "Version unchanged for '$pkg': $aur_version"
+        return 1
+    fi
+
+    log_info "Version changed for '$pkg': $cached_version -> $aur_version"
+    return 0
+}
+
 # Main execution
 main() {
     local package_dir="${OUTPUT_DIR}/${PACKAGE}"
@@ -157,6 +233,24 @@ main() {
     # Check if package exists in AUR
     if ! check_package_exists "$PACKAGE"; then
         exit 1
+    fi
+
+    # Check version if not forcing and versions file provided
+    if [[ "$FORCE_BUILD" != "true" ]] && [[ -n "$VERSIONS_FILE" ]]; then
+        local aur_version
+        aur_version=$(get_aur_version "$PACKAGE")
+        
+        if [[ -n "$aur_version" ]]; then
+            local cached_version
+            cached_version=$(get_cached_version "$PACKAGE" "$VERSIONS_FILE")
+            
+            if ! check_version_changed "$PACKAGE" "$aur_version" "$cached_version"; then
+                log_info "Skipping '$PACKAGE' - version unchanged since last build"
+                exit 5
+            fi
+        fi
+    elif [[ "$FORCE_BUILD" == "true" ]]; then
+        log_info "Force build requested - skipping version check"
     fi
 
     # Clone the package
