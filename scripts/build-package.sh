@@ -131,7 +131,9 @@ build_package() {
     # Move built packages to output directory
     log_step "Moving built packages to $OUTPUT_DIR..."
     local pkg_files
-    pkg_files=$(find "$pkg_dir" -maxdepth 1 -name "*.pkg.tar.zst" -o -name "*.pkg.tar.zst.sig" 2>/dev/null)
+    # Only match Arch package naming: name-version-pkgrel-arch.pkg.tar.zst
+    # This excludes upstream source files with different naming conventions
+    pkg_files=$(find "$pkg_dir" -maxdepth 1 \( -name "*-x86_64.pkg.tar.zst" -o -name "*-any.pkg.tar.zst" -o -name "*-x86_64.pkg.tar.zst.sig" -o -name "*-any.pkg.tar.zst.sig" \) 2>/dev/null)
 
     if [[ -z "$pkg_files" ]]; then
         log_error "No package files found after build"

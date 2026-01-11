@@ -20,8 +20,8 @@ packages:
 #  - name: paru
 #    aur: true
 
-#  - name: visual-studio-code-bin
-#    aur: true
+  - name: visual-studio-code-bin
+    aur: true
 
 #  - name: spotify
 #    aur: true
