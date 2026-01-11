@@ -43,6 +43,12 @@ log_step() {
     echo -e "${BLUE}[STEP]${NC} $1"
 }
 
+# Sanitize filename for artifact upload (replace colons with _EPOCH_)
+# GitHub Actions artifacts don't allow colons due to NTFS limitations
+sanitize_filename() {
+    echo "${1//:/_EPOCH_}"
+}
+
 usage() {
     echo "Usage: $0 <package-name> [build-dir] [output-dir]"
     echo ""
@@ -136,8 +142,14 @@ build_package() {
         if [[ -f "$pkg_file" ]]; then
             local filename
             filename=$(basename "$pkg_file")
-            log_info "Moving $filename to $OUTPUT_DIR/"
-            mv "$pkg_file" "$OUTPUT_DIR/"
+            # Replace colons with _EPOCH_ for artifact upload compatibility
+            local safe_filename
+            safe_filename=$(sanitize_filename "$filename")
+            if [[ "$filename" != "$safe_filename" ]]; then
+                log_info "Renaming $filename -> $safe_filename (epoch sanitization)"
+            fi
+            log_info "Moving $safe_filename to $OUTPUT_DIR/"
+            mv "$pkg_file" "$OUTPUT_DIR/$safe_filename"
         fi
     done
 

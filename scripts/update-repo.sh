@@ -44,6 +44,11 @@ log_step() {
     echo -e "${BLUE}[STEP]${NC} $1"
 }
 
+# Restore filename from artifact upload sanitization (replace _EPOCH_ with colons)
+restore_filename() {
+    echo "${1//_EPOCH_/:}"
+}
+
 usage() {
     echo "Usage: $0 <repo-name> [package-dir]"
     echo ""
@@ -98,6 +103,15 @@ update_repo() {
 
     # Change to package directory
     pushd "$pkg_dir" > /dev/null
+
+    # Restore epoch colons in filenames (sanitized for artifact upload)
+    for pkg in *_EPOCH_*.pkg.tar.zst *_EPOCH_*.pkg.tar.zst.sig; do
+        [[ -f "$pkg" ]] || continue
+        local restored
+        restored=$(restore_filename "$pkg")
+        log_info "Restoring filename: $pkg -> $restored"
+        mv "$pkg" "$restored"
+    done
 
     # Remove old database files
     rm -f "${repo}.db" "${repo}.db.tar.gz" "${repo}.db.sig"

@@ -14,18 +14,24 @@ repository:
 #   force_rebuild: true (optional, always rebuild)
 
 packages:
-  - name: yay
-    aur: true
+#  - name: yay
+#    aur: true
 
-  - name: paru
-    aur: true
+#  - name: paru
+#    aur: true
 
   - name: visual-studio-code-bin
     aur: true
 
-  - name: spotify
-    aur: true
-    skip_pgp_check: true
+#  - name: spotify
+#    aur: true
+#    skip_pgp_check: true
+#
+#  - name: brave-bin
+#    aur: true
 
-  - name: brave-bin
+  - name: windscribe-v2-bin
+    aur: true
+
+  - name: kanata-git
     aur: true
