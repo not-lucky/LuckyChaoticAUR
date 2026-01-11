@@ -1,0 +1,31 @@
+# LuckyChaoticAUR Package Configuration
+# Add packages here to build them automatically
+
+repository:
+  name: luckychaoticaur
+  maintainer: "Lucky <lucky@example.com>"
+  description: "Personal AUR package repository"
+
+# Package list - add AUR packages to build
+# Options:
+#   name: AUR package name (required)
+#   aur: true (required for AUR packages)
+#   skip_pgp_check: true (optional, skip PGP verification)
+#   force_rebuild: true (optional, always rebuild)
+
+packages:
+  - name: yay
+    aur: true
+
+  - name: paru
+    aur: true
+
+  - name: visual-studio-code-bin
+    aur: true
+
+  - name: spotify
+    aur: true
+    skip_pgp_check: true
+
+  - name: brave-bin
+    aur: true

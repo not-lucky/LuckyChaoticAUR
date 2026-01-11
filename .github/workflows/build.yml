@@ -1,0 +1,210 @@
+name: Build AUR Packages
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'packages.yaml'
+      - '.github/workflows/build.yml'
+      - 'scripts/**'
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Specific package to build (leave empty for all)'
+        required: false
+        default: ''
+      force:
+        description: 'Force rebuild even if up-to-date'
+        required: false
+        default: 'false'
+        type: boolean
+  schedule:
+    # Run daily at 6 AM UTC
+    - cron: '0 6 * * *'
+
+env:
+  REPO_NAME: luckychaoticaur
+
+jobs:
+  # Job 1: Parse packages.yaml and prepare build matrix
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      repo_name: ${{ steps.set-matrix.outputs.repo_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Parse packages.yaml
+        id: set-matrix
+        run: |
+          # Install yq for YAML parsing
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+          # Get repository name
+          REPO_NAME=$(yq '.repository.name' packages.yaml)
+          echo "repo_name=$REPO_NAME" >> $GITHUB_OUTPUT
+
+          # Build package matrix
+          if [[ -n "${{ github.event.inputs.package }}" ]]; then
+            # Single package specified
+            PACKAGES='["${{ github.event.inputs.package }}"]'
+          else
+            # All packages from yaml
+            PACKAGES=$(yq -o=json '.packages[].name' packages.yaml | jq -s -c '.')
+          fi
+
+          echo "matrix={\"package\":$PACKAGES}" >> $GITHUB_OUTPUT
+          echo "Packages to build: $PACKAGES"
+
+  # Job 2: Build packages in parallel using matrix strategy
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+      options: --privileged
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Arch Linux build environment
+        run: |
+          # Update system and install build dependencies
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel git jq curl sudo
+
+          # Create build user (makepkg doesn't run as root)
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+          # Setup directories
+          mkdir -p /build/aur /build/repo/x86_64
+          chown -R builder:builder /build
+          chown -R builder:builder .
+
+      - name: Import GPG key
+        if: env.GPG_PRIVATE_KEY != ''
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | base64 -d | sudo -u builder gpg --import
+          echo "GPGKEY=$(sudo -u builder gpg --list-secret-keys --keyid-format LONG | grep sec | awk '{print $2}' | cut -d'/' -f2)" >> $GITHUB_ENV
+
+      - name: Get package configuration
+        id: pkg-config
+        run: |
+          # Install yq
+          curl -sL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/local/bin/yq
+          chmod +x /usr/local/bin/yq
+
+          PKG="${{ matrix.package }}"
+
+          # Check if skip_pgp_check is set
+          SKIP_PGP=$(yq ".packages[] | select(.name == \"$PKG\") | .skip_pgp_check // false" packages.yaml)
+          echo "skip_pgp=$SKIP_PGP" >> $GITHUB_OUTPUT
+
+          # Check if force_rebuild is set
+          FORCE=$(yq ".packages[] | select(.name == \"$PKG\") | .force_rebuild // false" packages.yaml)
+          echo "force_rebuild=$FORCE" >> $GITHUB_OUTPUT
+
+      - name: Fetch PKGBUILD from AUR
+        run: |
+          chmod +x scripts/fetch-pkgbuild.sh
+          sudo -u builder ./scripts/fetch-pkgbuild.sh "${{ matrix.package }}" /build/aur
+
+      - name: Build package
+        env:
+          SKIP_PGP_CHECK: ${{ steps.pkg-config.outputs.skip_pgp == 'true' && '1' || '' }}
+          PACKAGER: ${{ secrets.PACKAGER || 'LuckyChaoticAUR <noreply@github.com>' }}
+        run: |
+          chmod +x scripts/build-package.sh
+          cd /build
+          sudo -u builder SKIP_PGP_CHECK="$SKIP_PGP_CHECK" PACKAGER="$PACKAGER" GPGKEY="${GPGKEY:-}" \
+            $GITHUB_WORKSPACE/scripts/build-package.sh "${{ matrix.package }}" /build/aur /build/repo/x86_64
+
+      - name: Upload built packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.package }}
+          path: /build/repo/x86_64/*.pkg.tar.zst*
+          retention-days: 7
+
+  # Job 3: Generate repository database and deploy to GitHub Pages
+  deploy:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    permissions:
+      contents: write
+      pages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup environment
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel git python python-pyyaml jq
+
+      - name: Download all package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: repo/x86_64
+          pattern: package-*
+          merge-multiple: true
+
+      - name: Import GPG key for database signing
+        if: env.GPG_PRIVATE_KEY != ''
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | base64 -d | gpg --import
+          echo "GPGKEY=$(gpg --list-secret-keys --keyid-format LONG | grep sec | awk '{print $2}' | cut -d'/' -f2)" >> $GITHUB_ENV
+
+      - name: Generate repository database
+        env:
+          REPO_NAME: ${{ needs.prepare.outputs.repo_name }}
+        run: |
+          chmod +x scripts/update-repo.sh
+          ./scripts/update-repo.sh "$REPO_NAME" repo/x86_64
+
+      - name: Generate web index
+        run: |
+          if [[ -f scripts/generate-index.py ]]; then
+            chmod +x scripts/generate-index.py
+            python scripts/generate-index.py
+          else
+            echo "Index generator not found, skipping..."
+          fi
+
+      - name: Copy web assets
+        run: |
+          if [[ -d web ]]; then
+            cp -r web/* repo/ 2>/dev/null || true
+          fi
+
+      - name: List repository contents
+        run: |
+          echo "=== Repository Contents ==="
+          ls -la repo/
+          echo "=== x86_64 packages ==="
+          ls -la repo/x86_64/
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./repo
+          publish_branch: gh-pages
+          force_orphan: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'Deploy: Update repository packages'
