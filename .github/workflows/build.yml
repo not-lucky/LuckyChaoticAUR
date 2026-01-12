@@ -200,6 +200,9 @@ jobs:
   # Job 3: Generate repository database and deploy to GitHub Releases
   deploy:
     needs: [prepare, build]
+    # Run even if some build jobs failed (e.g., package name typo in packages.yaml)
+    # Only skip if the workflow was cancelled
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest

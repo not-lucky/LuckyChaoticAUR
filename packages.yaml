@@ -15,7 +15,7 @@ repository:
 
 packages:
    - name: visual-studio-code-bin
-   - name: kanta-git
+   - name: kanata-git
    - name: windscribe-v2-bin
 
 
