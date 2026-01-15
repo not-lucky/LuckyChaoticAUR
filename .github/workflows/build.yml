@@ -108,6 +108,13 @@ jobs:
           name: versions-cache
           path: /build
 
+      - name: Fix versions cache permissions
+        run: |
+          # Ensure builder user can read versions.json for version comparison
+          chown builder:builder /build/versions.json
+          echo "Cached versions:"
+          cat /build/versions.json
+
       - name: Import GPG key
         if: env.GPG_PRIVATE_KEY != ''
         env:
@@ -225,6 +232,10 @@ jobs:
           path: repo/x86_64
           pattern: package-*
           merge-multiple: true
+        continue-on-error: true
+
+      - name: Ensure repo directory exists
+        run: mkdir -p repo/x86_64
 
       - name: Download versions cache
         uses: actions/download-artifact@v4
