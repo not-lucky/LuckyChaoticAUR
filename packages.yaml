@@ -17,6 +17,7 @@ packages:
    - name: visual-studio-code-bin
    - name: kanata-git
    - name: windscribe-v2-bin
+   - name: antigravity
 
 
 #  # AUR Helpers
