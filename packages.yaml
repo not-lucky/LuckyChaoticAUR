@@ -18,6 +18,7 @@ packages:
    - name: kanata-git
    - name: windscribe-v2-bin
    - name: antigravity
+   - name: helium-browser-bin
 
 
 #  # AUR Helpers
