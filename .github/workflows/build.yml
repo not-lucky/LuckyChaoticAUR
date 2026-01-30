@@ -116,7 +116,7 @@ jobs:
           cat /build/versions.json
 
       - name: Import GPG key
-        if: env.GPG_PRIVATE_KEY != ''
+        if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
@@ -258,7 +258,7 @@ jobs:
           
           # Update versions.json with newly built package versions
           if [[ -d version-info ]]; then
-            for info_file in version-info/aur-info.json version-info/*/aur-info.json; do
+            find version-info -name "aur-info.json" | while read -r info_file; do
               [[ -f "$info_file" ]] || continue
               PKG_NAME=$(jq -r '.Name' "$info_file")
               PKG_VERSION=$(jq -r '.Version' "$info_file")
@@ -273,7 +273,7 @@ jobs:
           cat versions.json
 
       - name: Import GPG key for database signing
-        if: env.GPG_PRIVATE_KEY != ''
+        if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
         env:
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
         run: |

@@ -19,7 +19,7 @@ packages:
    - name: windscribe-v2-bin
    - name: antigravity
    - name: helium-browser-bin
-
+     skip_pgp_check: true
 
 #  # AUR Helpers
 #  - name: yay
