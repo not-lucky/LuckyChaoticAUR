@@ -16,5 +16,5 @@ packages:
    - name: visual-studio-code-bin
    - name: kanata-git
    - name: windscribe-v2-bin
-   - name: antigravity-git
+   - name: antigravity
    - name: helium-browser-bin
