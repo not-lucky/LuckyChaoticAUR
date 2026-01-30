@@ -115,15 +115,6 @@ jobs:
           echo "Cached versions:"
           cat /build/versions.json
 
-      - name: Import GPG key
-        if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
-        env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-        run: |
-          echo "$GPG_PRIVATE_KEY" | base64 -d | sudo -u builder gpg --import
-          echo "GPGKEY=$(sudo -u builder gpg --list-secret-keys --keyid-format LONG | grep sec | awk '{print $2}' | cut -d'/' -f2)" >> $GITHUB_ENV
-
       - name: Get package configuration
         id: pkg-config
         run: |
@@ -132,10 +123,6 @@ jobs:
           chmod +x /usr/local/bin/yq
 
           PKG="${{ matrix.package }}"
-
-          # Check if skip_pgp_check is set
-          SKIP_PGP=$(yq ".packages[] | select(.name == \"$PKG\") | .skip_pgp_check // false" packages.yaml)
-          echo "skip_pgp=$SKIP_PGP" >> $GITHUB_OUTPUT
 
           # Check if force_rebuild is set
           FORCE=$(yq ".packages[] | select(.name == \"$PKG\") | .force_rebuild // false" packages.yaml)
@@ -171,12 +158,11 @@ jobs:
       - name: Build package
         if: steps.fetch.outputs.skip != 'true'
         env:
-          SKIP_PGP_CHECK: ${{ steps.pkg-config.outputs.skip_pgp == 'true' && '1' || '' }}
           PACKAGER: ${{ secrets.PACKAGER || 'LuckyChaoticAUR <noreply@github.com>' }}
         run: |
           chmod +x scripts/build-package.sh
           cd /build
-          sudo -u builder SKIP_PGP_CHECK="$SKIP_PGP_CHECK" PACKAGER="$PACKAGER" GPGKEY="${GPGKEY:-}" \
+          sudo -u builder PACKAGER="$PACKAGER" \
             $GITHUB_WORKSPACE/scripts/build-package.sh "${{ matrix.package }}" /build/aur /build/repo/x86_64
 
       - name: Get built package version
@@ -272,14 +258,6 @@ jobs:
           echo "Updated versions.json:"
           cat versions.json
 
-      - name: Import GPG key for database signing
-        if: ${{ secrets.GPG_PRIVATE_KEY != '' }}
-        env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-        run: |
-          echo "$GPG_PRIVATE_KEY" | base64 -d | gpg --import
-          echo "GPGKEY=$(gpg --list-secret-keys --keyid-format LONG | grep sec | awk '{print $2}' | cut -d'/' -f2)" >> $GITHUB_ENV
-
       - name: Generate repository database
         env:
           REPO_NAME: ${{ needs.prepare.outputs.repo_name }}
@@ -323,14 +301,6 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --clobber \
             *.pkg.tar.zst *.db* *.files* 2>/dev/null || true
-
-          # Upload signature files if they exist
-          if ls *.sig 1> /dev/null 2>&1; then
-            gh release upload repo \
-              --repo "$GITHUB_REPOSITORY" \
-              --clobber \
-              *.sig
-          fi
 
           # Upload updated versions.json
           echo "Uploading versions.json..."

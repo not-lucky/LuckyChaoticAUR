@@ -1,4 +1,3 @@
-#!/bin/bash
 # update-repo.sh - Generate pacman repository database using repo-add
 #
 # Usage: ./update-repo.sh <repo-name> [package-dir]
@@ -6,10 +5,6 @@
 # This script:
 #   1. Runs repo-add to create/update the package database
 #   2. Creates symlinks for .db and .files
-#   3. Optionally signs the database files
-#
-# Environment variables:
-#   GPGKEY - GPG key ID for signing database (optional)
 #
 # Exit codes:
 #   0 - Success
@@ -58,8 +53,6 @@ usage() {
     echo "  repo-name    Name of the repository (e.g., 'myrepo')"
     echo "  package-dir  Directory containing .pkg.tar.zst files (default: ./repo/x86_64)"
     echo ""
-    echo "Environment variables:"
-    echo "  GPGKEY  GPG key ID for signing database (optional)"
     exit 1
 }
 
@@ -74,7 +67,7 @@ update_repo() {
     local repo="$1"
     local pkg_dir="$2"
     local db_file="${pkg_dir}/${repo}.db.tar.gz"
-    local repo_add_args=("--verify" "--remove")
+    local repo_add_args=("--remove")
 
     # Check if package directory exists
     if [[ ! -d "$pkg_dir" ]]; then
@@ -93,19 +86,13 @@ update_repo() {
         log_info "Found $pkg_count package(s) in $pkg_dir"
     fi
 
-    # Add signing if GPGKEY is set
-    if [[ -n "${GPGKEY:-}" ]]; then
-        log_info "Database will be signed with key: $GPGKEY"
-        repo_add_args+=("--sign")
-    fi
-
     log_step "Generating repository database: $db_file"
 
     # Change to package directory
     pushd "$pkg_dir" > /dev/null
 
     # Restore epoch colons in filenames (sanitized for artifact upload)
-    for pkg in *_EPOCH_*.pkg.tar.zst *_EPOCH_*.pkg.tar.zst.sig; do
+    for pkg in *_EPOCH_*.pkg.tar.zst; do
         [[ -f "$pkg" ]] || continue
         local restored
         restored=$(restore_filename "$pkg")
@@ -114,8 +101,8 @@ update_repo() {
     done
 
     # Remove old database files
-    rm -f "${repo}.db" "${repo}.db.tar.gz" "${repo}.db.sig"
-    rm -f "${repo}.files" "${repo}.files.tar.gz" "${repo}.files.sig"
+    rm -f "${repo}.db" "${repo}.db.tar.gz"
+    rm -f "${repo}.files" "${repo}.files.tar.gz"
 
     # Get all package files
     local packages
@@ -154,6 +141,40 @@ update_repo() {
     log_info "Repository database generated successfully"
     return 0
 }
+
+# List repository contents
+list_repo() {
+    local pkg_dir="$1"
+
+    log_step "Repository contents:"
+    echo ""
+    echo "Database files:"
+    ls -la "$pkg_dir"/*.db* 2>/dev/null || echo "  (none)"
+    echo ""
+    echo "Files database:"
+    ls -la "$pkg_dir"/*.files* 2>/dev/null || echo "  (none)"
+    echo ""
+    echo "Packages:"
+    ls -la "$pkg_dir"/*.pkg.tar.zst 2>/dev/null || echo "  (none)"
+    echo ""
+}
+
+# Main execution
+main() {
+    log_step "Updating repository: $REPO_NAME"
+    log_info "Package directory: $PACKAGE_DIR"
+
+    if ! update_repo "$REPO_NAME" "$PACKAGE_DIR"; then
+        log_error "Failed to update repository"
+        exit 1
+    fi
+
+    list_repo "$PACKAGE_DIR"
+
+    log_info "Repository update completed successfully"
+}
+
+main
 
 # List repository contents
 list_repo() {

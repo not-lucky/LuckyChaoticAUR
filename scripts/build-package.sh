@@ -94,23 +94,6 @@ build_package() {
     # Create output directory
     mkdir -p "$OUTPUT_DIR"
 
-    # Add skip pgp check if requested
-    if [[ -n "${SKIP_PGP_CHECK:-}" ]]; then
-        log_warn "Skipping PGP signature verification"
-        makepkg_args+=("--skippgpcheck")
-    fi
-
-    # Add signing if GPGKEY is set
-    if [[ -n "${GPGKEY:-}" ]]; then
-        log_info "Package will be signed with key: $GPGKEY"
-        makepkg_args+=("--sign")
-    fi
-
-    # Set packager if provided
-    if [[ -n "${PACKAGER:-}" ]]; then
-        export PACKAGER
-    fi
-
     log_step "Building package '$pkg'..."
     log_info "Build directory: $pkg_dir"
     log_info "Output directory: $OUTPUT_DIR"
@@ -120,7 +103,7 @@ build_package() {
     pushd "$pkg_dir" > /dev/null
 
     # Run makepkg
-    if ! makepkg "${makepkg_args[@]}"; then
+    if ! makepkg --skippgpcheck "${makepkg_args[@]}"; then
         log_error "Build failed for package '$pkg'"
         popd > /dev/null
         return 1
