@@ -18,4 +18,4 @@ packages:
    - name: windscribe-v2-bin
    - name: antigravity
    - name: helium-browser-bin
-   - name: discordo-git
+   # - name: discordo-git
