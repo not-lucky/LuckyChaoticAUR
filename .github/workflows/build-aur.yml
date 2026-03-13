@@ -1,0 +1,46 @@
+name: Build AUR Packages
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'packages.txt'
+      - 'build.sh'
+      - '.github/workflows/build-aur.yml'
+  schedule:
+    - cron: '0 0 * * *' # Midnight every day
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+    
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build packages
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Generate release tag
+        id: tag
+        run: echo "PREFIX=$(date +'%Y%m%d%H%M')" >> $GITHUB_OUTPUT
+
+      - name: Release Packages
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: repo-${{ steps.tag.outputs.PREFIX }}
+          name: Arch Repository Update ${{ steps.tag.outputs.PREFIX }}
+          files: |
+            repo/*.pkg.tar.zst
+            repo/luckyrepo.db
+            repo/luckyrepo.files
