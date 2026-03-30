@@ -48,7 +48,7 @@ build_package() {
         set -e
         cd /home/builduser
         rm -rf \"${pkg}\"
-        
+
         # Clone with retry logic for network issues
         for i in 1 2 3; do
             if git clone --depth 1 https://aur.archlinux.org/${pkg}.git; then
@@ -61,16 +61,16 @@ build_package() {
                 sleep 2
             fi
         done
-        
+
         cd ${pkg}
 
-        # We use a lock for dependency installation to prevent pacman lock conflicts
+        # Install dependencies (requires sudo, makepkg -s --nobuild handles this)
         echo \"[$pkg] Installing dependencies...\"
-        flock /run/pacman-aur/lock sudo makepkg -s --noconfirm --nobuild
+        flock /run/pacman-aur/lock sudo pacman -S --noconfirm --needed \$(makepkg -O)
 
-        # Build the package
+        # Build the package as builduser (NOT as root)
         echo \"[$pkg] Compiling...\"
-        MAKEFLAGS=\"-j\$(nproc)\" sudo makepkg --noconfirm --nocolor
+        MAKEFLAGS=\"-j\$(nproc)\" makepkg --noconfirm --nocolor
 
         # Move output to repo
         cp *.pkg.tar.zst \"$REPO_DIR/\" || true
