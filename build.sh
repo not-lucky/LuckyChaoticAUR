@@ -104,14 +104,14 @@ build_package() {
     sudo -u "$BUILD_USER" bash -c "
         set -e
         cd \"$BUILD_HOME\"
-        rm -rf \"\${pkg}\"
+        rm -rf \"${pkg}\"
 
         # Clone with retry logic for network issues
         for i in \$(seq 1 $GIT_CLONE_RETRIES); do
-            if git clone --depth 1 $AUR_URL/\${pkg}.git; then
+            if git clone --depth 1 $AUR_URL/${pkg}.git; then
                 break
             elif [ \$i -eq $GIT_CLONE_RETRIES ]; then
-                echo \"Failed to clone \${pkg} after $GIT_CLONE_RETRIES attempts\"
+                echo \"Failed to clone ${pkg} after $GIT_CLONE_RETRIES attempts\"
                 exit 1
             else
                 echo \"Clone attempt \$i failed, retrying...\"
@@ -119,10 +119,10 @@ build_package() {
             fi
         done
 
-        cd \${pkg}
+        cd ${pkg}
 
         # Build the package (makepkg -s will use sudo for pacman to install deps)
-        echo \"[\${pkg}] Building package...\"
+        echo \"[${pkg}] Building package...\"
         flock \"$LOCK_FILE\" bash -c 'MAKEFLAGS=\"\$MAKEFLAGS\" makepkg -s --noconfirm --nocolor'
 
         # Move output to repo
