@@ -9,7 +9,7 @@ MAX_PARALLEL=4
 
 echo "Initializing pacman ..."
 pacman-key --init
-pacman -Sy --noconfirm base-devel git sudo util-linux pacman-contrib
+pacman -Sy --noconfirm base-devel git sudo util-linux pacman-contrib ca-certificates
 
 # Install common AUR build dependencies that are often needed
 pacman -S --noconfirm --needed alsa-lib cairo gtk3 libcups libsoup3 libx11 libxcb \
@@ -38,7 +38,20 @@ build_package() {
         set -e
         cd /home/builduser
         rm -rf \"${pkg}\"
-        git clone --depth 1 https://aur.archlinux.org/${pkg}.git
+        
+        # Clone with retry logic for network issues
+        for i in 1 2 3; do
+            if git clone --depth 1 https://aur.archlinux.org/${pkg}.git; then
+                break
+            elif [ \$i -eq 3 ]; then
+                echo \"Failed to clone ${pkg} after 3 attempts\"
+                exit 1
+            else
+                echo \"Clone attempt \$i failed, retrying...\"
+                sleep 2
+            fi
+        done
+        
         cd ${pkg}
 
         # We use a lock for dependency installation to prevent pacman lock conflicts
