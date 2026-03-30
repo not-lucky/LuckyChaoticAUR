@@ -64,13 +64,9 @@ build_package() {
 
         cd ${pkg}
 
-        # Install dependencies (requires sudo)
-        echo \"[$pkg] Installing dependencies...\"
-        flock /run/pacman-aur/lock sudo pacman -S --noconfirm --needed --asdeps \$(makepkg --printdeps)
-
-        # Build the package as builduser (NOT as root)
-        echo \"[$pkg] Compiling...\"
-        MAKEFLAGS=\"-j\$(nproc)\" makepkg --noconfirm --nocolor
+        # Build the package (makepkg -s will use sudo for pacman to install deps)
+        echo \"[$pkg] Building package...\"
+        flock /run/pacman-aur/lock bash -c 'MAKEFLAGS=\"-j$(nproc)\" makepkg -s --noconfirm --nocolor'
 
         # Move output to repo
         cp *.pkg.tar.zst \"$REPO_DIR/\" || true
