@@ -64,9 +64,9 @@ build_package() {
 
         cd ${pkg}
 
-        # Install dependencies (requires sudo, makepkg -s --nobuild handles this)
+        # Install dependencies (requires sudo)
         echo \"[$pkg] Installing dependencies...\"
-        flock /run/pacman-aur/lock sudo pacman -S --noconfirm --needed \$(makepkg -O)
+        flock /run/pacman-aur/lock sudo pacman -S --noconfirm --needed --asdeps \$(makepkg --printdeps)
 
         # Build the package as builduser (NOT as root)
         echo \"[$pkg] Compiling...\"
