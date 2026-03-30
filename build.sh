@@ -9,7 +9,12 @@ MAX_PARALLEL=4
 
 echo "Initializing pacman ..."
 pacman-key --init
-pacman -Sy --noconfirm base-devel git sudo util-linux
+pacman -Sy --noconfirm base-devel git sudo util-linux pacman-contrib
+
+# Install common AUR build dependencies that are often needed
+pacman -S --noconfirm --needed alsa-lib cairo gtk3 libcups libsoup3 libx11 libxcb \
+    libxcomposite libxdamage libxext libxfixes libxkbcommon libxkbfile libxrandr \
+    mesa nspr nss pango webkit2gtk-4.1
 
 echo "Creating build user..."
 useradd -m -g users -s /bin/bash builduser || true
@@ -30,6 +35,7 @@ build_package() {
 
     # Run as builduser
     sudo -u builduser bash -c "
+        set -e
         cd /home/builduser
         rm -rf \"${pkg}\"
         git clone --depth 1 https://aur.archlinux.org/${pkg}.git
@@ -37,14 +43,14 @@ build_package() {
 
         # We use a lock for dependency installation to prevent pacman lock conflicts
         echo \"[$pkg] Installing dependencies...\"
-        sudo flock /run/pacman-aur.lock makepkg -s --noconfirm --nobuild
+        flock /run/pacman-aur.lock sudo makepkg -s --noconfirm --nobuild
 
         # Build the package
         echo \"[$pkg] Compiling...\"
-        MAKEFLAGS=\"-j\$(nproc)\" makepkg --noconfirm --nocolor
-        
+        MAKEFLAGS=\"-j\$(nproc)\" sudo makepkg --noconfirm --nocolor
+
         # Move output to repo
-        cp *.pkg.tar.zst \"$REPO_DIR/\"
+        cp *.pkg.tar.zst \"$REPO_DIR/\" || true
     "
     echo "=========================================="
     echo " FINISHED BUILD: $pkg"
