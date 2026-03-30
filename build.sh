@@ -20,6 +20,16 @@ echo "Creating build user..."
 useradd -m -g users -s /bin/bash builduser || true
 echo 'builduser ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builduser
 
+# Configure git for better SSL handling
+git config --global http.sslBackend openssl
+git config --global http.lowSpeedLimit 0
+git config --global http.lowSpeedTime 999999
+
+# Create lock file directory and file that builduser can access
+mkdir -p /run/pacman-aur
+touch /run/pacman-aur/lock
+chown builduser:users /run/pacman-aur/lock
+
 mkdir -p "$REPO_DIR"
 chown -R builduser:users "$REPO_DIR"
 
@@ -56,7 +66,7 @@ build_package() {
 
         # We use a lock for dependency installation to prevent pacman lock conflicts
         echo \"[$pkg] Installing dependencies...\"
-        flock /run/pacman-aur.lock sudo makepkg -s --noconfirm --nobuild
+        flock /run/pacman-aur/lock sudo makepkg -s --noconfirm --nobuild
 
         # Build the package
         echo \"[$pkg] Compiling...\"
