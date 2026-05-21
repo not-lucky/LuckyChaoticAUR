@@ -86,6 +86,15 @@ mkdir -p "$(dirname "$LOCK_FILE")"
 touch "$LOCK_FILE"
 chown "$BUILD_USER:$BUILD_GROUP" "$LOCK_FILE"
 
+# Create a pacman wrapper to avoid database locks during parallel builds
+log_info "Creating pacman wrapper for parallel builds..."
+PACMAN_WRAPPER="/usr/bin/pacman-wrapper"
+cat << EOF > "$PACMAN_WRAPPER"
+#!/bin/bash
+exec flock "$LOCK_FILE" /usr/bin/pacman "\$@"
+EOF
+chmod +x "$PACMAN_WRAPPER"
+
 mkdir -p "$REPO_DIR"
 chown -R "$BUILD_USER:$BUILD_GROUP" "$REPO_DIR"
 
@@ -93,6 +102,7 @@ chown -R "$BUILD_USER:$BUILD_GROUP" "$REPO_DIR"
 export REPO_DIR
 export WORKSPACE_DIR
 export MAKEFLAGS
+export PACMAN_WRAPPER
 
 build_package() {
     local pkg=$1
@@ -123,7 +133,7 @@ build_package() {
 
         # Build the package (makepkg -s will use sudo for pacman to install deps)
         echo \"[${pkg}] Building package...\"
-        flock \"$LOCK_FILE\" bash -c 'MAKEFLAGS=\"\$MAKEFLAGS\" makepkg -s --noconfirm --nocolor'
+        PACMAN=\"$PACMAN_WRAPPER\" MAKEFLAGS=\"$MAKEFLAGS\" makepkg -s --noconfirm --nocolor
 
         # Move output to repo
         cp *.pkg.tar.zst \"$REPO_DIR/\" || true

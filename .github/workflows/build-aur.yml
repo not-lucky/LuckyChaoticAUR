@@ -12,6 +12,12 @@ on:
   schedule:
     - cron: '0 0 * * *' # Midnight every day
   workflow_dispatch:
+    inputs:
+      max_parallel:
+        description: 'Maximum number of parallel builds'
+        required: false
+        default: '4'
+        type: string
 
 jobs:
   build:
@@ -30,6 +36,8 @@ jobs:
         run: |
           chmod +x build.sh
           ./build.sh
+        env:
+          MAX_PARALLEL: ${{ github.event.inputs.max_parallel || '4' }}
 
       - name: Generate release tag
         id: tag
