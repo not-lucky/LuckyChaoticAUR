@@ -1,13 +1,18 @@
 #!/bin/bash
 set -eo pipefail
 
+# Helper function to print logs to stderr so they don't corrupt GITHUB_OUTPUT
+log() {
+  echo "$@" >&2
+}
+
 # Inputs
 REPO="$1"
 BRANCH="$2"
 ARCH="x86_64"
 
 if [ -z "$REPO" ] || [ -z "$BRANCH" ]; then
-  echo "Usage: $0 <owner/repo> <branch>"
+  log "Usage: $0 <owner/repo> <branch>"
   exit 1
 fi
 
@@ -29,14 +34,14 @@ if [ -f packages.txt ]; then
     packages+=("$line")
   done < packages.txt
 else
-  echo "Error: packages.txt not found!"
+  log "Error: packages.txt not found!"
   exit 1
 fi
 
 to_build=()
 
 for pkg in "${packages[@]}"; do
-  echo "Checking package: $pkg"
+  log "Checking package: $pkg"
   
   # Work in a separate directory for each package
   pkg_dir="/tmp/check-$pkg"
@@ -44,10 +49,10 @@ for pkg in "${packages[@]}"; do
   mkdir -p "$pkg_dir"
   
   if [ -d "$pkg" ]; then
-    echo "  Using local package directory: $pkg"
+    log "  Using local package directory: $pkg"
     cp -r "$pkg"/* "$pkg_dir/"
   else
-    echo "  Cloning from AUR..."
+    log "  Cloning from AUR..."
     git clone "https://aur.archlinux.org/${pkg}.git" "$pkg_dir"
   fi
   
@@ -59,9 +64,9 @@ for pkg in "${packages[@]}"; do
   
   # Fetch sources and update version (crucial for -git packages)
   # Run as builder without checking dependencies
-  echo "  Running makepkg -od to resolve version info..."
+  log "  Running makepkg -od to resolve version info..."
   sudo -u builder makepkg -od --noconfirm --nodeps >/dev/null 2>&1 || {
-    echo "  Warning: failed to update version for $pkg, proceeding with static version."
+    log "  Warning: failed to update version for $pkg, proceeding with static version."
   }
   
   # Get expected package files
@@ -75,11 +80,11 @@ for pkg in "${packages[@]}"; do
     # Check HTTP status of the package file on raw github
     status_code=$(curl -L -s -o /dev/null -w "%{http_code}" "$url")
     if [ "$status_code" -ne 200 ]; then
-      echo "    Package file $pkgname not found (HTTP status: $status_code). Build is needed."
+      log "    Package file $pkgname not found (HTTP status: $status_code). Build is needed."
       pkg_needed=true
       break
     else
-      echo "    Package file $pkgname already exists."
+      log "    Package file $pkgname already exists."
     fi
   done
   
@@ -90,7 +95,7 @@ for pkg in "${packages[@]}"; do
   popd >/dev/null
 done
 
-# Output JSON array of packages to build and build status
+# Output JSON array of packages to build and build status to stdout
 json_array=$(jq -n -c '$ARGS.positional' --args "${to_build[@]}")
 echo "packages_to_build=${json_array}"
 
