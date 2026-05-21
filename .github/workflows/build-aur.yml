@@ -2,61 +2,131 @@ name: Build AUR Packages
 
 on:
   push:
-    branches:
-      - main
-      - master
     paths:
       - 'packages.txt'
-      - 'build.sh'
       - '.github/workflows/build-aur.yml'
+      - 'scripts/**'
   schedule:
-    - cron: '0 0 * * *' # Midnight every day
+    - cron: '0 0 * * *' # Daily at midnight UTC
   workflow_dispatch:
-    inputs:
-      max_parallel:
-        description: 'Maximum number of parallel builds'
-        required: false
-        default: '4'
-        type: string
+
+permissions:
+  contents: write
 
 jobs:
-  build:
+  setup:
     runs-on: ubuntu-latest
     container:
       image: archlinux:base-devel
-    
-    permissions:
-      contents: write
-
+    outputs:
+      packages: ${{ steps.check.outputs.packages_to_build }}
+      build_needed: ${{ steps.check.outputs.build_needed }}
     steps:
+      - name: Install system dependencies
+        run: |
+          pacman -Syu --noconfirm --needed git sudo curl jq
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build packages
+      - name: Check which packages need to be built
+        id: check
         run: |
-          chmod +x build.sh
-          ./build.sh
-        env:
-          MAX_PARALLEL: ${{ github.event.inputs.max_parallel || '4' }}
+          chmod +x scripts/check_packages.sh
+          ./scripts/check_packages.sh "${{ github.repository }}" "repository" >> $GITHUB_OUTPUT
 
-      - name: Generate release tag
-        id: tag
-        run: echo "PREFIX=$(date +'%Y%m%d%H%M')" >> $GITHUB_OUTPUT
+  build:
+    needs: setup
+    if: needs.setup.outputs.build_needed == 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+    strategy:
+      matrix:
+        package: ${{ fromJSON(needs.setup.outputs.packages) }}
+      fail-fast: false
+    steps:
+      - name: Install system dependencies
+        run: |
+          pacman -Syu --noconfirm --needed git sudo curl
 
-      - name: Release Packages
-        uses: softprops/action-gh-release@v2
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build package
+        run: |
+          pkg="${{ matrix.package }}"
+          echo "Building package: $pkg"
+          
+          # Setup builder user
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+          
+          # Determine package directory
+          pkg_dir="/tmp/build-$pkg"
+          mkdir -p "$pkg_dir"
+          
+          if [ -d "$pkg" ]; then
+            echo "Using local package directory: $pkg"
+            cp -r "$pkg"/* "$pkg_dir/"
+          else
+            echo "Cloning from AUR..."
+            git clone "https://aur.archlinux.org/${pkg}.git" "$pkg_dir"
+          fi
+          
+          chown -R builder:builder "$pkg_dir"
+          cd "$pkg_dir"
+          
+          # Import GPG keys if specified in PKGBUILD/.SRCINFO
+          if [ -f .SRCINFO ]; then
+            gpg_keys=$(grep -E '^\s*validpgpkeys\s*=' .SRCINFO | cut -d'=' -f2 | tr -d '[:blank:]' | tr -d "'" | tr -d '"')
+            for key in $gpg_keys; do
+              if [ -n "$key" ]; then
+                echo "Importing PGP key: $key"
+                sudo -u builder gpg --recv-keys "$key" || \
+                sudo -u builder gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys "$key" || \
+                echo "Failed to import key $key"
+              fi
+            done
+          fi
+          
+          # Update package databases
+          pacman -Sy
+          
+          # Build package using makepkg (installs dependencies via pacman)
+          sudo -u builder makepkg --syncdeps --noconfirm --noprogressbar
+          
+          # Copy built package files to staging
+          mkdir -p /tmp/built-packages
+          cp *.pkg.tar.zst /tmp/built-packages/
+
+      - name: Upload Package Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: repo-${{ steps.tag.outputs.PREFIX }}
-          name: Arch Repository Update ${{ steps.tag.outputs.PREFIX }}
-          files: |
-            repo/*.pkg.tar.zst
-            repo/luckyrepo.db
-            repo/luckyrepo.files
+          name: package-artifacts-${{ matrix.package }}
+          path: /tmp/built-packages/*.pkg.tar.zst
 
-      - name: Delete older releases
-        uses: dev-drprasad/delete-older-releases@v0.3.3
+  publish:
+    needs: [setup, build]
+    if: needs.setup.outputs.build_needed == 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+    steps:
+      - name: Install system dependencies
+        run: |
+          pacman -Syu --noconfirm --needed git sudo curl
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
-          keep_latest: 7
-          delete_tags: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          path: /tmp/new-packages
+          merge-multiple: true
+
+      - name: Update repository and database
+        run: |
+          chmod +x scripts/update_repository.sh
+          ./scripts/update_repository.sh "${{ github.repository }}" "repository" "${{ secrets.GITHUB_TOKEN }}"
