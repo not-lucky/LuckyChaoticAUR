@@ -91,7 +91,7 @@ log_info "Creating pacman wrapper for parallel builds..."
 PACMAN_WRAPPER="/usr/bin/pacman-wrapper"
 cat << EOF > "$PACMAN_WRAPPER"
 #!/bin/bash
-exec flock "$LOCK_FILE" /usr/bin/pacman "\$@"
+exec flock --close "$LOCK_FILE" /usr/bin/pacman "\$@"
 EOF
 chmod +x "$PACMAN_WRAPPER"
 
