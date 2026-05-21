@@ -16,8 +16,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: archlinux:base-devel
     
     permissions:
       contents: write
@@ -26,10 +24,86 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build packages
+      - name: Create local repo directory
+        run: mkdir -p repo
+
+      - name: Build packages in parallel containers
         run: |
-          chmod +x build.sh
-          ./build.sh
+          # Read packages and filter comments/empty lines
+          packages=$(grep -v '^#' packages.txt | grep -v '^$')
+          
+          # Run packages concurrently using background docker runs
+          # We can support MAX_CONCURRENT limit. Default to 4.
+          MAX_CONCURRENT=10
+          running_jobs=0
+          declare -A pids
+          exit_code=0
+          
+          for pkg in $packages; do
+            # Wait if we hit the concurrency limit
+            while [ $running_jobs -ge $MAX_CONCURRENT ]; do
+              # Check which jobs have finished
+              for p_pkg in "${!pids[@]}"; do
+                pid=${pids[$p_pkg]}
+                if ! kill -0 $pid 2>/dev/null; then
+                  # Job finished!
+                  wait $pid
+                  status=$?
+                  echo "=== LOGS FOR $p_pkg ==="
+                  docker logs "build-$p_pkg" || true
+                  docker rm "build-$p_pkg" || true
+                  unset pids[$p_pkg]
+                  ((running_jobs--))
+                  if [ $status -ne 0 ]; then
+                    echo "Error: Package build failed for $p_pkg (exit code $status)"
+                    exit_code=1
+                  fi
+                fi
+              done
+              sleep 1
+            done
+
+            echo "Starting docker container for package: $pkg"
+            docker run --name "build-$pkg" \
+              -v "$PWD/repo:/repo" \
+              -v "$PWD/build.sh:/build.sh" \
+              -e REPO_DIR=/repo \
+              archlinux:base-devel \
+              bash -c "chmod +x /build.sh && /build.sh --single $pkg" &
+            pids["$pkg"]=$!
+            ((running_jobs++))
+          done
+
+          # Wait for remaining jobs to finish
+          for pkg in "${!pids[@]}"; do
+            pid=${pids[$pkg]}
+            wait $pid
+            status=$?
+            echo "=== LOGS FOR $pkg ==="
+            docker logs "build-$pkg" || true
+            docker rm "build-$pkg" || true
+            if [ $status -ne 0 ]; then
+              echo "Error: Package build failed for $pkg (exit code $status)"
+              exit_code=1
+            fi
+          done
+          
+          exit $exit_code
+
+      - name: Create repository database
+        run: |
+          docker run --rm \
+            -v "$PWD/repo:/repo" \
+            archlinux:base-devel \
+            bash -c "
+              pacman-key --init
+              pacman -Sy --noconfirm pacman-contrib
+              cd /repo
+              repo-add -s -n -R luckyrepo.db.tar.gz *.pkg.tar.zst
+              rm -f luckyrepo.db luckyrepo.files
+              mv luckyrepo.db.tar.gz luckyrepo.db
+              mv luckyrepo.files.tar.gz luckyrepo.files
+            "
 
       - name: Generate release tag
         id: tag

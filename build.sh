@@ -141,6 +141,16 @@ export GIT_CLONE_RETRIES
 export GIT_CLONE_RETRY_SLEEP
 export LOCK_FILE
 
+if [ "$1" = "--single" ]; then
+    pkg="$2"
+    if [ -z "$pkg" ]; then
+        log_error "No package specified for --single"
+        exit 1
+    fi
+    build_package "$pkg"
+    exit 0
+fi
+
 # Check if packages file exists
 if [ ! -f "$PACKAGES_FILE" ]; then
     log_error "Packages file not found: $PACKAGES_FILE"

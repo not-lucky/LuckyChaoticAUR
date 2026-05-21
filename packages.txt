@@ -1,6 +1,7 @@
 paru-bin
-antigravity
 google-chrome-beta
 bun-bin
 wallust
 kanata-git
+antigravity-cli
+antigravity-ide
