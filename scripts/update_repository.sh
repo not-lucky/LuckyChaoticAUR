@@ -16,30 +16,13 @@ WORKSPACE_DIR=$(pwd)
 REPO_DIR="${WORKSPACE_DIR}/repo-dir"
 NEW_PACKAGES_DIR="/tmp/new-packages"
 
-# Setup git credentials
-git config --global user.name "github-actions[bot]"
-git config --global user.email "github-actions[bot]@users.noreply.github.com"
-# Mark workspace as safe
-git config --global --add safe.directory "$WORKSPACE_DIR"
+# Setup GitHub CLI Token
+export GH_TOKEN="$TOKEN"
 
-repo_url="https://x-access-token:${TOKEN}@github.com/${REPO}.git"
-
-# Clone the repository branch if it exists, otherwise initialize it
-echo "Cloning or initializing the $BRANCH branch..."
-git clone --branch "$BRANCH" "$repo_url" "$REPO_DIR" || {
-  echo "Branch $BRANCH does not exist. Creating a new one..."
-  mkdir -p "$REPO_DIR"
-  cd "$REPO_DIR"
-  git init
-  git checkout -b "$BRANCH"
-  git remote add origin "$repo_url"
-  cd "$WORKSPACE_DIR"
-}
-
-# Mark repo-dir as safe
-git config --global --add safe.directory "$REPO_DIR"
-
+# Download existing repository assets from the release if they exist
+echo "Downloading existing repository assets..."
 mkdir -p "${REPO_DIR}/${ARCH}"
+gh release download "$BRANCH" --repo "$REPO" --dir "${REPO_DIR}/${ARCH}" --pattern "*" || echo "No existing release found."
 
 # Process each new package file
 echo "Processing new packages..."
@@ -96,7 +79,7 @@ if [ "$(ls -A *.pkg.tar.zst 2>/dev/null)" ]; then
   
   repo-add -R "${DB_NAME}.db.tar.zst" *.pkg.tar.zst
   
-  # Replace symlinks with actual copies to support raw github hosting
+  # Replace symlinks with actual copies to support raw download hosting
   echo "Converting symlinks to real files..."
   for link in "${DB_NAME}.db" "${DB_NAME}.files"; do
     if [ -L "$link" ] || [ -f "$link" ]; then
@@ -112,27 +95,20 @@ else
   echo "No package files found to build repository database."
 fi
 
-# Go to repo-dir root
-cd "$REPO_DIR"
+# Recreate the GitHub Release with the new files
+echo "Publishing to GitHub Release $BRANCH..."
 
-# Commit and force-push as orphan commit to save space
-echo "Committing and force-pushing..."
-git add -A
+# Delete old release and tag (if they exist)
+gh release delete "$BRANCH" --repo "$REPO" --yes --cleanup-tag || true
 
-# Check if there are any changes to commit
-if git diff --cached --quiet; then
-  echo "No changes in the repository branch."
-  exit 0
-fi
+# Wait a short moment for deletion to propagate in the API
+sleep 2
 
-# Create an orphan commit to prevent git history bloat
-if git rev-parse --verify HEAD >/dev/null 2>&1; then
-  git checkout --orphan temp-branch
-  git commit -m "Automated build: $(date -u)"
-  git branch -M "$BRANCH"
-else
-  git commit -m "Automated build: $(date -u)"
-fi
+# Create new release containing all assets
+gh release create "$BRANCH" \
+  --repo "$REPO" \
+  --title "Pacman Repository" \
+  --notes "Automated repository update: $(date -u)" \
+  *
 
-git push origin "$BRANCH" --force
-echo "Repository branch $BRANCH successfully updated."
+echo "Repository successfully updated on GitHub Releases."

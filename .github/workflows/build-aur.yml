@@ -115,7 +115,7 @@ jobs:
     steps:
       - name: Install system dependencies
         run: |
-          pacman -Syu --noconfirm --needed git sudo curl
+          pacman -Syu --noconfirm --needed git sudo curl github-cli
 
       - name: Checkout repository
         uses: actions/checkout@v4

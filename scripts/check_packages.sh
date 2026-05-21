@@ -75,7 +75,7 @@ for pkg in "${packages[@]}"; do
   pkg_needed=false
   for pkgfile in $pkgfiles; do
     pkgname=$(basename "$pkgfile")
-    url="https://raw.githubusercontent.com/${REPO}/${BRANCH}/${ARCH}/${pkgname}"
+    url="https://github.com/${REPO}/releases/download/${BRANCH}/${pkgname}"
     
     # Check HTTP status of the package file on raw github
     status_code=$(curl -L -s -o /dev/null -w "%{http_code}" "$url")
