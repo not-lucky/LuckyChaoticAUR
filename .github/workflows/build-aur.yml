@@ -1,11 +1,6 @@
 name: Build AUR Packages
 
 on:
-  push:
-    paths:
-      - 'packages.txt'
-      - '.github/workflows/build-aur.yml'
-      - 'scripts/**'
   schedule:
     - cron: '0 0 * * *' # Daily at midnight UTC
   workflow_dispatch:
@@ -100,11 +95,15 @@ jobs:
           mkdir -p /tmp/built-packages
           cp *.pkg.tar.zst /tmp/built-packages/
 
+      - name: Archive Package Artifacts
+        run: |
+          tar -cvf /tmp/package-artifacts.tar -C /tmp/built-packages .
+
       - name: Upload Package Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: package-artifacts-${{ matrix.package }}
-          path: /tmp/built-packages/*.pkg.tar.zst
+          path: /tmp/package-artifacts.tar
 
   publish:
     needs: [setup, build]
@@ -125,6 +124,16 @@ jobs:
         with:
           path: /tmp/new-packages
           merge-multiple: true
+
+      - name: Extract Package Artifacts
+        run: |
+          cd /tmp/new-packages
+          for f in *.tar; do
+            if [ -f "$f" ]; then
+              tar -xvf "$f"
+              rm "$f"
+            fi
+          done
 
       - name: Update repository and database
         run: |
