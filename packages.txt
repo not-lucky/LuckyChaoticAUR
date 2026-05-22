@@ -5,3 +5,5 @@ wallust
 kanata-git
 antigravity-ide
 antigravity-cli
+kiro-ide
+
