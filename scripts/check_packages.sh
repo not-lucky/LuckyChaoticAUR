@@ -75,16 +75,18 @@ for pkg in "${packages[@]}"; do
   pkg_needed=false
   for pkgfile in $pkgfiles; do
     pkgname=$(basename "$pkgfile")
-    url="https://github.com/${REPO}/releases/download/${BRANCH}/${pkgname}"
+    # Sanitize filename (replace colons with dots) to match GitHub Releases asset naming
+    pkgname_clean=$(echo "$pkgname" | tr ':' '.')
+    url="https://github.com/${REPO}/releases/download/${BRANCH}/${pkgname_clean}"
     
     # Check HTTP status of the package file on raw github
     status_code=$(curl -L -s -o /dev/null -w "%{http_code}" "$url")
     if [ "$status_code" -ne 200 ]; then
-      log "    Package file $pkgname not found (HTTP status: $status_code). Build is needed."
+      log "    Package file $pkgname_clean not found (HTTP status: $status_code). Build is needed."
       pkg_needed=true
       break
     else
-      log "    Package file $pkgname already exists."
+      log "    Package file $pkgname_clean already exists."
     fi
   done
   

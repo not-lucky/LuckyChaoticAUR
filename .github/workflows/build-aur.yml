@@ -91,9 +91,14 @@ jobs:
           # Build package using makepkg (installs dependencies via pacman)
           sudo -u builder makepkg --syncdeps --noconfirm --noprogressbar
           
-          # Copy built package files to staging
+          # Copy built package files to staging, sanitizing any colons in filenames
           mkdir -p /tmp/built-packages
-          cp *.pkg.tar.zst /tmp/built-packages/
+          for f in *.pkg.tar.zst; do
+            if [ -f "$f" ]; then
+              clean_name=$(echo "$f" | tr ':' '.')
+              cp "$f" "/tmp/built-packages/$clean_name"
+            fi
+          done
 
       - name: Archive Package Artifacts
         run: |
