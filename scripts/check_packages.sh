@@ -29,9 +29,11 @@ if [ -f packages.txt ]; then
     # Strip carriage return characters if present
     line=$(echo "$line" | tr -d '\r')
     # Ignore empty lines and comments
-    [[ "$line" =~ ^# ]] && continue
-    [[ -z "$line" ]] && continue
-    packages+=("$line")
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    # Strip leading/trailing whitespace if needed, and ignore empty lines
+    trimmed_line=$(echo "$line" | xargs)
+    [[ -z "$trimmed_line" ]] && continue
+    packages+=("$trimmed_line")
   done < packages.txt
 else
   log "Error: packages.txt not found!"

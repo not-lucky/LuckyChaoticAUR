@@ -102,13 +102,13 @@ jobs:
 
       - name: Archive Package Artifacts
         run: |
-          tar -cvf /tmp/package-artifacts.tar -C /tmp/built-packages .
+          tar -cvf "/tmp/${{ matrix.package }}.tar" -C /tmp/built-packages .
 
       - name: Upload Package Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: package-artifacts-${{ matrix.package }}
-          path: /tmp/package-artifacts.tar
+          path: /tmp/${{ matrix.package }}.tar
 
   publish:
     needs: [setup, build]
