@@ -1,9 +1,9 @@
 paru-bin
 google-chrome-beta
 bun-bin
-#wallust
-#kanata-git
+wallust
+kanata-git
 antigravity-ide
 antigravity-cli
 kiro-ide
-
+trae-bin
