@@ -7,4 +7,4 @@ antigravity-ide
 antigravity-cli
 kiro-ide
 trae-bin
-appimagelauncher
+#appimagelauncher
