@@ -6,5 +6,5 @@ kanata-git
 antigravity-ide
 antigravity-cli
 kiro-ide
-trae-bin
+#trae-bin
 #appimagelauncher
