@@ -8,3 +8,4 @@ antigravity-cli
 kiro-ide
 #trae-bin
 #appimagelauncher
+sing-box
