@@ -9,3 +9,4 @@ kiro-ide
 #trae-bin
 #appimagelauncher
 sing-box
+dsearch-bin
