@@ -41,46 +41,58 @@ else
 fi
 
 to_build=()
+result_dir="/tmp/check-results"
+rm -rf "$result_dir"
+mkdir -p "$result_dir"
 
-for pkg in "${packages[@]}"; do
+# Worker: check one package and record its verdict in $result_dir/$pkg.
+# Must NOT write to stdout — stdout is reserved for GITHUB_OUTPUT.
+# Verdict file contains exactly: "true" (build needed), "false" (up to date),
+# or "error" (clone failed -> setup must abort, preserving the old fail-loud contract).
+check_pkg() {
+  local pkg="$1"
+  local pkg_dir="/tmp/check-$pkg"
+  local rc="$result_dir/$pkg"
+  local pkg_needed=false
+
   log "Checking package: $pkg"
-  
-  # Work in a separate directory for each package
-  pkg_dir="/tmp/check-$pkg"
+
   rm -rf "$pkg_dir"
   mkdir -p "$pkg_dir"
-  
+
   if [ -d "$pkg" ]; then
     log "  Using local package directory: $pkg"
     cp -r "$pkg"/* "$pkg_dir/"
   else
     log "  Cloning from AUR..."
-    git clone "https://aur.archlinux.org/${pkg}.git" "$pkg_dir"
+    git clone "https://aur.archlinux.org/${pkg}.git" "$pkg_dir" || {
+      log "  Error: clone failed for $pkg"
+      printf "error" > "$rc"
+      return
+    }
   fi
-  
+
   # Fix ownership for builder
   chown -R builder:builder "$pkg_dir"
-  
-  # Change to package directory to check version info
+
   pushd "$pkg_dir" >/dev/null
-  
+
   # Fetch sources and update version (crucial for -git packages)
   # Run as builder without checking dependencies
   log "  Running makepkg -od to resolve version info..."
   sudo -u builder makepkg -od --noconfirm --nodeps >/dev/null 2>&1 || {
     log "  Warning: failed to update version for $pkg, proceeding with static version."
   }
-  
+
   # Get expected package files
   pkgfiles=$(sudo -u builder makepkg --packagelist)
-  
-  pkg_needed=false
+
   for pkgfile in $pkgfiles; do
     pkgname=$(basename "$pkgfile")
     # Sanitize filename (replace colons with dots) to match GitHub Releases asset naming
     pkgname_clean=$(echo "$pkgname" | tr ':' '.')
     url="https://github.com/${REPO}/releases/download/${BRANCH}/${pkgname_clean}"
-    
+
     # Check HTTP status of the package file on raw github
     status_code=$(curl -L -s -o /dev/null -w "%{http_code}" "$url")
     if [ "$status_code" -ne 200 ]; then
@@ -91,12 +103,36 @@ for pkg in "${packages[@]}"; do
       log "    Package file $pkgname_clean already exists."
     fi
   done
-  
-  if [ "$pkg_needed" = "true" ]; then
-    to_build+=("$pkg")
-  fi
-  
+
   popd >/dev/null
+
+  printf "%s" "$pkg_needed" > "$rc"
+}
+
+# Bounded concurrency: launch workers in background, keep at most CHECK_PARALLEL running.
+CHECK_PARALLEL="${CHECK_PARALLEL:-8}"
+running=0
+for pkg in "${packages[@]}"; do
+  check_pkg "$pkg" &
+  running=$((running + 1))
+  if [ "$running" -ge "$CHECK_PARALLEL" ]; then
+    wait -n || true
+    running=$((running - 1))
+  fi
+done
+wait || true
+
+# Aggregate results in deterministic input order (input order == packages.txt order).
+# A missing or non-boolean verdict means the worker died before recording a result
+# (e.g. makepkg failed under set -e); treat that as fatal rather than silently skipping
+# the package, preserving the old fail-loud contract.
+for pkg in "${packages[@]}"; do
+  r="$(cat "$result_dir/$pkg" 2>/dev/null)"
+  case "$r" in
+    true)  to_build+=("$pkg") ;;
+    false) ;;
+    *)     log "Fatal: check failed for $pkg (no valid verdict: '${r:-<none>}')"; exit 1 ;;
+  esac
 done
 
 # Output JSON array of packages to build and build status to stdout
