@@ -10,4 +10,4 @@ kiro-ide
 #appimagelauncher
 sing-box
 dsearch-bin
-goose-desktop
+goose-desktop-bin
