@@ -18,6 +18,7 @@ NEW_PACKAGES_DIR="/tmp/new-packages"
 
 # Setup GitHub CLI Token
 export GH_TOKEN="$TOKEN"
+export GITHUB_TOKEN="$TOKEN"
 
 # Download existing repository assets from the release if they exist
 echo "Downloading existing repository assets..."
@@ -54,8 +55,10 @@ if [ -d "$NEW_PACKAGES_DIR" ] && [ "$(ls -A "$NEW_PACKAGES_DIR" 2>/dev/null)" ];
       ex_pkgname="${ex_base%-*}"
       
       if [ "$ex_pkgname" = "$pkgname" ]; then
-        echo "  Deleting old file: $existing_file"
+        echo "  Deleting old local file: $existing_file"
         rm -f "$existing_path"
+        echo "  Deleting old release asset: $existing_file"
+        gh release delete-asset "$BRANCH" "$existing_file" --repo "$REPO" --yes 2>/dev/null || true
       fi
     done
     
@@ -95,20 +98,20 @@ else
   echo "No package files found to build repository database."
 fi
 
-# Recreate the GitHub Release with the new files
+# Publish / Upload to GitHub Release
 echo "Publishing to GitHub Release $BRANCH..."
 
-# Delete old release and tag (if they exist)
-gh release delete "$BRANCH" --repo "$REPO" --yes --cleanup-tag || true
+# Check if release exists; if not, create it
+if ! gh release view "$BRANCH" --repo "$REPO" >/dev/null 2>&1; then
+  echo "Creating release $BRANCH..."
+  gh release create "$BRANCH" \
+    --repo "$REPO" \
+    --title "Pacman Repository" \
+    --notes "Automated repository update: $(date -u)"
+fi
 
-# Wait a short moment for deletion to propagate in the API
-sleep 2
-
-# Create new release containing all assets
-gh release create "$BRANCH" \
-  --repo "$REPO" \
-  --title "Pacman Repository" \
-  --notes "Automated repository update: $(date -u)" \
-  *
+# Upload all files, overwriting existing assets of the same name
+echo "Uploading assets to release $BRANCH..."
+gh release upload "$BRANCH" * --repo "$REPO" --clobber
 
 echo "Repository successfully updated on GitHub Releases."

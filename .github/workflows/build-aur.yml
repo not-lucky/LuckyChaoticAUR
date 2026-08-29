@@ -138,6 +138,8 @@ jobs:
     needs: [setup, build]
     if: needs.setup.outputs.build_needed == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     container:
       image: archlinux:base-devel
     steps:
@@ -165,6 +167,9 @@ jobs:
           done
 
       - name: Update repository and database
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           chmod +x scripts/update_repository.sh
           ./scripts/update_repository.sh "${{ github.repository }}" "repository" "${{ secrets.GITHUB_TOKEN }}"
