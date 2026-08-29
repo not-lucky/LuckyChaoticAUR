@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=WorkBuddy AI
+Comment=WorkBuddy AI Agent Desktop Application
+Exec=/usr/bin/workbuddy-ai %U
+Icon=workbuddy-ai
+Terminal=false
+Type=Application
+Categories=Development;Utility;
+MimeType=x-scheme-handler/workbuddy-ai;
+StartupWMClass=WorkBuddy AI

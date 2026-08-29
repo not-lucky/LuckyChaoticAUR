@@ -1,0 +1,29 @@
+pkgbase = workbuddy-ai-bin
+	pkgdesc = WorkBuddy AI - AI Agent Desktop Application (Official International Edition from workbuddy.ai)
+	pkgver = 5.4.2.36857725_d74591c4
+	pkgrel = 1
+	url = https://www.workbuddy.ai
+	arch = x86_64
+	license = custom
+	makedepends = p7zip
+	makedepends = npm
+	depends = electron37-bin
+	depends = gtk3
+	depends = nss
+	depends = libxss
+	optdepends = ripgrep: fast workspace file and content search
+	provides = workbuddy-ai=5.4.2.36857725_d74591c4
+	conflicts = workbuddy-ai
+	noextract = workbuddy-ai-bin-5.4.2.36857725_d74591c4.dmg
+	options = !strip
+	options = !debug
+	source = workbuddy-ai-bin-5.4.2.36857725_d74591c4.dmg::https://codebuddy-1328495429.cos.accelerate.myqcloud.com/workbuddy/saas/darwin-x64/WorkBuddy-darwin-x64-5.4.2.36857725-d74591c4.dmg
+	source = better-sqlite3-v12.8.0-electron-v136-linux-x64.tar.gz::https://github.com/WiseLibs/better-sqlite3/releases/download/v12.8.0/better-sqlite3-v12.8.0-electron-v136-linux-x64.tar.gz
+	source = workbuddy-ai.desktop
+	source = workbuddy-ai.sh
+	sha256sums = 0f1dce554df89f5e50db04823144e01faee7ea88483875cdc7066406d15b362b
+	sha256sums = 466940818d571a7b40804f250f3764412da0d531a79dc62547add483cc327902
+	sha256sums = ab05e5edbc59b609f2f14baebe5e2a842b3f949c6fbfe465bd812ca71d4292b3
+	sha256sums = 2bf4647c72ba3bb26c76c89b1f527c66c95c35143aa5752532f290fe2a121a3c
+
+pkgname = workbuddy-ai-bin

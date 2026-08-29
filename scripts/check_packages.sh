@@ -22,8 +22,24 @@ if ! id -u builder >/dev/null 2>&1; then
   echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 fi
 
-# Read packages.txt
+# Helper to resolve local package directory
+resolve_pkg_dir() {
+  local pkg="$1"
+  if [ -d "$pkg" ] && [ -f "$pkg/PKGBUILD" ]; then
+    echo "$pkg"
+  elif [ -d "packages/$pkg" ] && [ -f "packages/$pkg/PKGBUILD" ]; then
+    echo "packages/$pkg"
+  elif [ -d "pkgs/$pkg" ] && [ -f "pkgs/$pkg/PKGBUILD" ]; then
+    echo "pkgs/$pkg"
+  else
+    echo ""
+  fi
+}
+
+# Read packages.txt and auto-discover local packages
 packages=()
+declare -A seen_packages=()
+
 if [ -f packages.txt ]; then
   while IFS= read -r line || [[ -n "$line" ]]; do
     # Strip carriage return characters if present
@@ -33,10 +49,31 @@ if [ -f packages.txt ]; then
     # Strip leading/trailing whitespace if needed, and ignore empty lines
     trimmed_line=$(echo "$line" | xargs)
     [[ -z "$trimmed_line" ]] && continue
-    packages+=("$trimmed_line")
+    pkg_name=$(basename "$trimmed_line")
+    if [[ -z "${seen_packages[$pkg_name]}" ]]; then
+      packages+=("$pkg_name")
+      seen_packages["$pkg_name"]=1
+    fi
   done < packages.txt
-else
-  log "Error: packages.txt not found!"
+fi
+
+# Auto-discover local packages in repo (root subdirectories, packages/*, pkgs/*)
+shopt -s nullglob
+for dir in */ packages/*/ pkgs/*/; do
+  dir="${dir%/}"
+  if [ -d "$dir" ] && [ -f "$dir/PKGBUILD" ]; then
+    pkg_name=$(basename "$dir")
+    if [[ "$pkg_name" != "scripts" && "$pkg_name" != ".github" && -z "${seen_packages[$pkg_name]}" ]]; then
+      log "Discovered local package: $pkg_name (in $dir)"
+      packages+=("$pkg_name")
+      seen_packages["$pkg_name"]=1
+    fi
+  fi
+done
+shopt -u nullglob
+
+if [ ${#packages[@]} -eq 0 ]; then
+  log "Error: No packages found in packages.txt or local directories!"
   exit 1
 fi
 
@@ -60,9 +97,12 @@ check_pkg() {
   rm -rf "$pkg_dir"
   mkdir -p "$pkg_dir"
 
-  if [ -d "$pkg" ]; then
-    log "  Using local package directory: $pkg"
-    cp -r "$pkg"/* "$pkg_dir/"
+  local local_dir
+  local_dir="$(resolve_pkg_dir "$pkg")"
+
+  if [ -n "$local_dir" ]; then
+    log "  Using local package directory: $local_dir"
+    cp -a "$local_dir/." "$pkg_dir/"
   else
     log "  Cloning from AUR..."
     git clone "https://aur.archlinux.org/${pkg}.git" "$pkg_dir" || {

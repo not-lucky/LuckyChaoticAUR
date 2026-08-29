@@ -1,0 +1,79 @@
+# Maintainer: Lucky <lucky@aur.archlinux.org>
+
+pkgname=workbuddy-ai-bin
+_pkgname=workbuddy-ai
+pkgver=5.4.2.36857725_d74591c4
+pkgrel=1
+pkgdesc="WorkBuddy AI - AI Agent Desktop Application (Official International Edition from workbuddy.ai)"
+arch=('x86_64')
+url="https://www.workbuddy.ai"
+license=('custom')
+depends=(
+  'electron37-bin'
+  'gtk3'
+  'nss'
+  'libxss'
+)
+makedepends=(
+  'p7zip'
+  'npm'
+)
+optdepends=(
+  'ripgrep: fast workspace file and content search'
+)
+provides=("${_pkgname}=${pkgver}")
+conflicts=("${_pkgname}")
+options=('!strip' '!debug')
+
+source=(
+  "${pkgname}-${pkgver}.dmg::https://codebuddy-1328495429.cos.accelerate.myqcloud.com/workbuddy/saas/darwin-x64/WorkBuddy-darwin-x64-${pkgver//_/-}.dmg"
+  "better-sqlite3-v12.8.0-electron-v136-linux-x64.tar.gz::https://github.com/WiseLibs/better-sqlite3/releases/download/v12.8.0/better-sqlite3-v12.8.0-electron-v136-linux-x64.tar.gz"
+  "workbuddy-ai.desktop"
+  "workbuddy-ai.sh"
+)
+sha256sums=(
+  '0f1dce554df89f5e50db04823144e01faee7ea88483875cdc7066406d15b362b'
+  '466940818d571a7b40804f250f3764412da0d531a79dc62547add483cc327902'
+  'ab05e5edbc59b609f2f14baebe5e2a842b3f949c6fbfe465bd812ca71d4292b3'
+  '2bf4647c72ba3bb26c76c89b1f527c66c95c35143aa5752532f290fe2a121a3c'
+)
+
+noextract=("${pkgname}-${pkgver}.dmg")
+
+prepare() {
+  cd "${srcdir}"
+  7z x -y "${pkgname}-${pkgver}.dmg" -o"extracted" > /dev/null
+
+  local app_res="extracted/WorkBuddy AI 5.4.2/WorkBuddy AI.app/Contents/Resources"
+  
+  # Replace darwin better-sqlite3 with linux x64 prebuild (ABI 136 / Electron 37)
+  mkdir -p "${app_res}/app.asar.unpacked/node_modules/better-sqlite3/build/Release"
+  cp -f "${srcdir}/build/Release/better_sqlite3.node" \
+        "${app_res}/app.asar.unpacked/node_modules/better-sqlite3/build/Release/better_sqlite3.node"
+
+  # Install snappy linux bindings if missing
+  if [ -d "${app_res}/app.asar.unpacked/cli" ]; then
+    cd "${app_res}/app.asar.unpacked/cli"
+    npm install @napi-rs/snappy-linux-x64-gnu@7.3.3 --no-save --omit=dev --ignore-scripts > /dev/null 2>&1 || true
+  fi
+}
+
+package() {
+  local app_res="${srcdir}/extracted/WorkBuddy AI 5.4.2/WorkBuddy AI.app/Contents/Resources"
+
+  # Application directory
+  install -d "${pkgdir}/opt/${_pkgname}"
+  cp -a "${app_res}/"* "${pkgdir}/opt/${_pkgname}/"
+
+  # Desktop launcher script
+  install -Dm755 "${srcdir}/workbuddy-ai.sh" "${pkgdir}/usr/bin/${_pkgname}"
+
+  # Desktop entry
+  install -Dm644 "${srcdir}/workbuddy-ai.desktop" "${pkgdir}/usr/share/applications/${_pkgname}.desktop"
+
+  # Icon
+  if [ -f "${app_res}/app.asar.unpacked/cli/vendor/assets/icon.png" ]; then
+    install -Dm644 "${app_res}/app.asar.unpacked/cli/vendor/assets/icon.png" \
+      "${pkgdir}/usr/share/icons/hicolor/512x512/apps/${_pkgname}.png"
+  fi
+}

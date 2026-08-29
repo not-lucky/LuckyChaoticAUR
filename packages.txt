@@ -11,3 +11,4 @@ kiro-ide
 sing-box
 dsearch-bin
 goose-desktop-bin
+workbuddy-ai-bin

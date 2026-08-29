@@ -4,6 +4,10 @@ on:
   schedule:
     - cron: '0 0 * * *' # Daily at midnight UTC
   workflow_dispatch:
+  push:
+    branches:
+      - master
+      - main
 
 permissions:
   contents: write
@@ -48,6 +52,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Configure pacman (multilib & custom repo)
+        run: |
+          # Enable multilib if disabled
+          sed -i '/\[multilib\]/,/Include/ s/^#//' /etc/pacman.conf
+
+          # Configure custom repo from GitHub Releases to resolve in-repo dependencies
+          cat << 'EOF' >> /etc/pacman.conf
+
+          [lucky-chaotic]
+          SigLevel = Optional TrustAll
+          Server = https://github.com/${{ github.repository }}/releases/download/repository
+          EOF
+
       - name: Build package
         run: |
           pkg="${{ matrix.package }}"
@@ -61,9 +78,16 @@ jobs:
           pkg_dir="/tmp/build-$pkg"
           mkdir -p "$pkg_dir"
           
-          if [ -d "$pkg" ]; then
+          # Locate local package directory or clone from AUR
+          if [ -d "$pkg" ] && [ -f "$pkg/PKGBUILD" ]; then
             echo "Using local package directory: $pkg"
-            cp -r "$pkg"/* "$pkg_dir/"
+            cp -a "$pkg/." "$pkg_dir/"
+          elif [ -d "packages/$pkg" ] && [ -f "packages/$pkg/PKGBUILD" ]; then
+            echo "Using local package directory: packages/$pkg"
+            cp -a "packages/$pkg/." "$pkg_dir/"
+          elif [ -d "pkgs/$pkg" ] && [ -f "pkgs/$pkg/PKGBUILD" ]; then
+            echo "Using local package directory: pkgs/$pkg"
+            cp -a "pkgs/$pkg/." "$pkg_dir/"
           else
             echo "Cloning from AUR..."
             git clone "https://aur.archlinux.org/${pkg}.git" "$pkg_dir"
