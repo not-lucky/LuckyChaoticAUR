@@ -3,7 +3,7 @@
 pkgname=workbuddy-ai-bin
 _pkgname=workbuddy-ai
 pkgver=5.4.2.36857725_d74591c4
-pkgrel=2
+pkgrel=3
 pkgdesc="WorkBuddy AI - AI Agent Desktop Application (Official International Edition from workbuddy.ai)"
 arch=('x86_64')
 url="https://www.workbuddy.ai"
@@ -51,6 +51,14 @@ prepare() {
   cp -f "${srcdir}/build/Release/better_sqlite3.node" \
         "${app_res}/app.asar.unpacked/node_modules/better-sqlite3/build/Release/better_sqlite3.node"
 
+  # Fix node-pty prebuild for linux x64
+  local node_pty_dir="${app_res}/app.asar.unpacked/node_modules/node-pty/prebuilds/linux-x64"
+  local lydell_pty="${app_res}/app.asar.unpacked/node_modules/@lydell/node-pty-linux-x64/prebuilds/linux-x64/pty.node"
+  if [ -f "${lydell_pty}" ]; then
+    mkdir -p "${node_pty_dir}"
+    cp -f "${lydell_pty}" "${node_pty_dir}/pty.node"
+  fi
+
   # Install snappy linux bindings if missing
   if [ -d "${app_res}/app.asar.unpacked/cli" ]; then
     cd "${app_res}/app.asar.unpacked/cli"
@@ -64,6 +72,12 @@ package() {
   # Application directory
   install -d "${pkgdir}/opt/${_pkgname}"
   cp -a "${app_res}/"* "${pkgdir}/opt/${_pkgname}/"
+
+  # Link unpacked runtime assets so standalone Electron finds them
+  ln -sf "app.asar.unpacked/cli" "${pkgdir}/opt/${_pkgname}/cli"
+  ln -sf "app.asar.unpacked/native" "${pkgdir}/opt/${_pkgname}/native"
+  ln -sf "app.asar.unpacked/resources" "${pkgdir}/opt/${_pkgname}/resources"
+  ln -sf "app.asar.unpacked/node_modules" "${pkgdir}/opt/${_pkgname}/node_modules"
 
   # Desktop launcher script
   install -Dm755 "${srcdir}/workbuddy-ai.sh" "${pkgdir}/usr/bin/${_pkgname}"
